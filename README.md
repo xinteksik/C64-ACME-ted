@@ -4,6 +4,10 @@ Terminálový editor pro ACME Assembler s integrovaným HEX viewerem a pokročil
 
 Terminal editor for ACME Assembler with integrated HEX viewer and advanced features for 6502 development.
 
+<img width="1305" height="634" alt="acme_editor_1" src="https://github.com/user-attachments/assets/393d5e82-948b-432e-a12a-cff548a74fb5" />
+
+<img width="1305" height="634" alt="acme_editor_2" src="https://github.com/user-attachments/assets/89b278af-4b86-407f-910a-db4164d2b24b" />
+
 ---
 
 ## Funkce / Features
@@ -128,7 +132,7 @@ pip install windows-curses
 
 ### Základní spuštění / Basic start
 \`\`\`bash
-python acme_terminal_editor.py
+python3 acme_terminal_editor.py
 \`\`\`
 
 Po prvním spuštění použijte \`:o\` pro otevření ASM souboru. Editor si zapamatuje poslední otevřený soubor.
@@ -137,7 +141,7 @@ After first start, use \`:o\` to open an ASM file. The editor will remember the 
 
 ### Spuštění s parametrem / Start with file parameter
 \`\`\`bash
-python acme_terminal_editor.py mycode.asm
+python3 acme_terminal_editor.py mycode.asm
 \`\`\`
 
 Otevře přímo zadaný soubor. / Opens the specified file directly.
@@ -207,22 +211,6 @@ sprite1:
 
 ---
 
-## Symboly C64 / C64 Symbols
-
-Editor obsahuje soubor \`c64symb.asm\` s definicemi KERNAL/BASIC rutin:
-
-The editor includes \`c64symb.asm\` file with KERNAL/BASIC routine definitions:
-
-\`\`\`asm
-!source "c64symb.asm"
-
-; Použití symbolů místo adres / Using symbols instead of addresses
-    JSR CBM_CHROUT  ; místo JSR $FFD2 / instead of JSR $FFD2
-    JSR CBM_CHRIN   ; místo JSR $FFCF / instead of JSR $FFCF
-\`\`\`
-
----
-
 ## Známé problémy / Known Issues
 
 - Editor je optimalizován pro terminály s minimální velikostí 80x24 / Editor is optimized for terminals with minimum size of 80x24
@@ -235,23 +223,6 @@ The editor includes \`c64symb.asm\` file with KERNAL/BASIC routine definitions:
 MIT License - viz soubor LICENSE / see LICENSE file
 
 ---
-
-## Autor / Author
-
-Vytvořeno s pomocí Claude (Anthropic) / Created with help of Claude (Anthropic)
-
----
-
-## Poděkování / Acknowledgments
-
-- ACME Assembler autoři / ACME Assembler authors
-- Commodore 64 komunita / Commodore 64 community
-
----
-
-## Licence / License
-
-Open source projekt / Open source project
 
 ## Autor / Author
 
