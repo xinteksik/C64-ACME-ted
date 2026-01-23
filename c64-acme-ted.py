@@ -1803,6 +1803,11 @@ class AcmeTerminalEditor:
         pseudopc_start_line = None
         pseudopc_start_offset = None
 
+        # Pro .prg soubory s cbm formátem: první 2 byty jsou load adresa
+        # Sledujeme start_address pro výpočet offsetů
+        start_address = None
+        current_address = None
+
         for line_num, line in enumerate(self.asm_lines):
             line_stripped = line.strip()
 
@@ -1810,15 +1815,26 @@ class AcmeTerminalEditor:
             if not line_stripped or line_stripped.startswith(';'):
                 continue
 
-            # Zpracovat * = offset directive (nastaví pozici v binárním souboru)
+            # Zpracovat * = offset directive
             if line_stripped.startswith('*'):
                 match = re.search(r'\*\s*=\s*(\$?[0-9A-Fa-f]+)', line_stripped)
                 if match:
                     offset_str = match.group(1)
                     if offset_str.startswith('$'):
-                        byte_offset = int(offset_str[1:], 16)
+                        new_address = int(offset_str[1:], 16)
                     else:
-                        byte_offset = int(offset_str)
+                        new_address = int(offset_str)
+
+                    # První * = nastavuje start address
+                    if start_address is None:
+                        start_address = new_address
+                        current_address = new_address
+                        byte_offset = 0  # První data začínají na offsetu 0 (po 2 bytech load adresy)
+                    else:
+                        # Další * = mění aktuální adresu (skok v paměti)
+                        # Offset v souboru se vypočítá jako rozdíl od start_address
+                        current_address = new_address
+                        byte_offset = current_address - start_address
                 continue
 
             # Zpracovat !pseudopc directive
@@ -1872,7 +1888,10 @@ class AcmeTerminalEditor:
             # 1. !byte / !by direktivy
             if line_no_comment.startswith('!byte ') or line_no_comment.startswith('!by '):
                 bytes_extracted = self.extract_bytes_from_line(line_no_comment)
-                byte_offset += len(bytes_extracted)
+                num_bytes = len(bytes_extracted)
+                byte_offset += num_bytes
+                if current_address is not None:
+                    current_address += num_bytes
 
             # 2. !word / !wo direktivy
             elif line_no_comment.startswith('!word ') or line_no_comment.startswith('!wo '):
@@ -1880,7 +1899,10 @@ class AcmeTerminalEditor:
                 words_count = line_no_comment.count('$')
                 if words_count == 0:
                     words_count = line_no_comment.count(',') + 1
-                byte_offset += words_count * 2
+                num_bytes = words_count * 2
+                byte_offset += num_bytes
+                if current_address is not None:
+                    current_address += num_bytes
 
             # 3. !text / !tx direktivy
             elif line_no_comment.startswith('!text ') or line_no_comment.startswith('!tx '):
@@ -1897,6 +1919,8 @@ class AcmeTerminalEditor:
                 byte_count += len(hex_bytes)
 
                 byte_offset += byte_count
+                if current_address is not None:
+                    current_address += byte_count
 
             # 4. Instrukce - použít opcode tabulku pro přesnou délku
             else:
@@ -1918,9 +1942,13 @@ class AcmeTerminalEditor:
 
                     if length is not None:
                         byte_offset += length
+                        if current_address is not None:
+                            current_address += length
                     else:
                         # Neznámá instrukce, použít odhad 2 byty
                         byte_offset += 2
+                        if current_address is not None:
+                            current_address += 2
 
     def run(self):
         """Hlavní smyčka editoru"""
