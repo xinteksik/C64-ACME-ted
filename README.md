@@ -1,4 +1,8 @@
 # C64-ACME-ted
+![Profile Views](https://github-vistors-counter.onrender.com/github?username=xinteksik)
+![GitHub last commit](https://img.shields.io/github/last-commit/xinteksik/C64-ACME-ted)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/xinteksik/C64-ACME-ted/total)
+
 
 Terminálový editor pro ACME Assembler s integrovaným HEX viewerem a pokročilými funkcemi pro vývoj 6502 kódu.
 
