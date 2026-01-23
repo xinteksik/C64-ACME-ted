@@ -4,6 +4,10 @@ Terminálový editor pro ACME Assembler s integrovaným HEX viewerem a pokročil
 
 Terminal editor for ACME Assembler with integrated HEX viewer and advanced features for 6502 development.
 
+<img width="1305" height="634" alt="acme_editor_1" src="https://github.com/user-attachments/assets/393d5e82-948b-432e-a12a-cff548a74fb5" />
+
+<img width="1305" height="634" alt="acme_editor_2" src="https://github.com/user-attachments/assets/89b278af-4b86-407f-910a-db4164d2b24b" />
+
 ---
 
 ## Funkce / Features
