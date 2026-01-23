@@ -132,7 +132,7 @@ pip install windows-curses
 
 ### Základní spuštění / Basic start
 \`\`\`bash
-python3 acme_terminal_editor.py
+python3 c64-acme-ted.py
 \`\`\`
 
 Po prvním spuštění použijte \`:o\` pro otevření ASM souboru. Editor si zapamatuje poslední otevřený soubor.
@@ -141,7 +141,7 @@ After first start, use \`:o\` to open an ASM file. The editor will remember the 
 
 ### Spuštění s parametrem / Start with file parameter
 \`\`\`bash
-python3 acme_terminal_editor.py mycode.asm
+python3 c64-acme-ted.py mycode.asm
 \`\`\`
 
 Otevře přímo zadaný soubor. / Opens the specified file directly.

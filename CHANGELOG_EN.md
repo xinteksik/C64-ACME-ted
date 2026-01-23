@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
 
 2. **Command-line Parameter Support**
    - Ability to open file directly on startup
-   - Usage: `python acme_terminal_editor.py filename.asm`
+   - Usage: `python c64-acme-ted.py filename.asm`
    - If no parameter is given, loads last file from config
    - If file doesn't exist, error message is shown in log
 

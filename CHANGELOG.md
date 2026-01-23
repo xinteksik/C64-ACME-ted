@@ -17,7 +17,7 @@ Všechny významné změny v tomto projektu budou zdokumentovány v tomto soubor
 
 2. **Podpora parametru příkazové řádky**
    - Možnost otevřít soubor přímo při spuštění
-   - Použití: `python acme_terminal_editor.py filename.asm`
+   - Použití: `python c64-acme-ted.py filename.asm`
    - Pokud není zadán parametr, načte se poslední soubor z config
    - Pokud soubor neexistuje, zobrazí se chybová zpráva v logu
 
@@ -477,7 +477,7 @@ chars_hex_editor.py:
 │ file.bin  size=256  cursor=00  │ <- A_REVERSE status
 └────────────────────────────────┘
 
-acme_terminal_editor.py (nyní):
+c64-acme-ted.py (nyní):
 ┌──────────────────┬──────────────┐
 │[ ASM EDITOR ]    │[ HEX DUMP ]  │ <- A_BOLD
 │   1  LDA #$FF    │00000000  31..│ <- A_REVERSE cursor
