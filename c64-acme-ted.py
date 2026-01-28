@@ -125,7 +125,11 @@ class AcmeTerminalEditor:
             else:
                 # Jinak zobrazit info + help text jako chars_hex_editor
                 disasm_indicator = " [DISASM]" if self.disasm_mode else ""
-                info = f"{file_name}  Ln {self.cursor_line + 1}  {self.mode}{disasm_indicator}  {HELP_TEXT}"
+
+                # Získat hex bytes aktuálního řádku
+                hex_bytes_str = self.get_hex_bytes_for_current_line()
+
+                info = f"{file_name}  Ln {self.cursor_line + 1}  {self.mode}{disasm_indicator}  {hex_bytes_str}  {HELP_TEXT}"
                 status_line = info
 
             # Oříznout a doplnit status line na šířku obrazovky
@@ -161,14 +165,16 @@ class AcmeTerminalEditor:
     def draw_asm_editor(self):
         """Kreslení ASM editoru"""
         height, width = self.stdscr.getmaxyx()
-        editor_height = height - 4  # -1 status, -1 title, -1 command, -1 bezpečnost
+        # Výška editoru: stejná jako HEX dump (height - 11) kvůli footer hlavičce HEX dumpu
+        editor_height = height - 11
         editor_width = width // 2 - 1
 
         for i in range(editor_height):
             line_num = self.scroll_offset + i
-            y_pos = i + 2  # +1 pro title bar, +1 pro spacing
+            y_pos = i + 2  # +2 pro title bar (1) + spacing (1)
 
-            if y_pos >= height - 2:  # Zabránit kreslení mimo obrazovku
+            # Zabránit kreslení do oblasti separátoru a logu (separator začíná na height - 8)
+            if y_pos >= height - 8:
                 break
 
             try:
@@ -252,8 +258,9 @@ class AcmeTerminalEditor:
         height, width = self.stdscr.getmaxyx()
         hex_start_x = width // 2 + 1
         hex_width = width - hex_start_x - 1
-        # Odečíst místo pro log window (12 řádků) a footer hlavičku (1 řádek)
-        editor_height = height - 3 - 12 - 1
+        # Výška pro HEX data (bez footer hlavičky): height - 10 - 1 = height - 11
+        # -10 pro základní layout, -1 pro footer hlavičku
+        editor_height = height - 11
 
         if not self.hex_data:
             try:
@@ -262,39 +269,59 @@ class AcmeTerminalEditor:
                 pass
             return
 
-        # Najít highlighted řádek podle cursor pozice
-        highlighted_hex_line = self.get_hex_line_for_asm_line(self.cursor_line)
+        # Najít highlighted byte range podle cursor pozice
+        highlighted_start_offset, highlighted_num_bytes = self.get_hex_range_for_asm_line(self.cursor_line)
 
-        # Synchronizovat scroll HEX vieweru s ASM editorem
-        # Udržovat highlighted řádek viditelný na obrazovce
-        if highlighted_hex_line < self.hex_scroll_offset:
-            # Highlighted řádek je nad viditelnou oblastí - scrollovat nahoru
-            self.hex_scroll_offset = highlighted_hex_line
-        elif highlighted_hex_line >= self.hex_scroll_offset + editor_height:
-            # Highlighted řádek je pod viditelnou oblastí - scrollovat dolů
-            self.hex_scroll_offset = highlighted_hex_line - editor_height + 1
+        # Pokud máme platné zvýraznění, synchronizovat scroll
+        if highlighted_start_offset is not None:
+            highlighted_hex_line = highlighted_start_offset // 8
+
+            # Synchronizovat scroll HEX vieweru s ASM editorem
+            # Cíl: highlighted HEX řádek by měl být na stejné vizuální pozici jako ASM kurzor
+
+            # Vypočítat pozici kurzoru na obrazovce (0 = první viditelný řádek)
+            asm_screen_pos = self.cursor_line - self.scroll_offset
+
+            # Nastavit HEX scroll tak, aby highlighted řádek byl na stejné obrazovkové pozici
+            # Příklad: cursor je na 10. viditelném řádku -> highlighted byte by měl být také na 10. viditelném řádku
+            target_hex_scroll = highlighted_hex_line - asm_screen_pos
+
+            # Omezit scroll na platný rozsah
+            max_hex_lines = (len(self.hex_data) + 7) // 8  # Celkový počet HEX řádků
+            max_scroll = max(0, max_hex_lines - editor_height)
+
+            self.hex_scroll_offset = max(0, min(target_hex_scroll, max_scroll))
+        else:
+            highlighted_hex_line = None
 
         # Vykreslit hlavičku HEX dumpu podle zvýrazněného řádku
-        highlighted_offset = highlighted_hex_line * 8
-        # Zjistit, zda adresa končí na 0 nebo 8
-        if (highlighted_offset & 0x0F) < 8:
-            # Adresa končí 0-7, zobrazit 00-07
-            header = "00 01 02 03 04 05 06 07"
+        if highlighted_hex_line is not None:
+            highlighted_offset = highlighted_hex_line * 8
+            # Zjistit, zda adresa končí na 0 nebo 8
+            if (highlighted_offset & 0x0F) < 8:
+                # Adresa končí 0-7, zobrazit 00-07
+                header = "00 01 02 03 04 05 06 07"
+            else:
+                # Adresa končí 8-F, zobrazit 08-0F
+                header = "08 09 0A 0B 0C 0D 0E 0F"
         else:
-            # Adresa končí 8-F, zobrazit 08-0F
-            header = "08 09 0A 0B 0C 0D 0E 0F"
+            # Defaultní hlavička
+            header = "00 01 02 03 04 05 06 07"
 
         try:
             self.stdscr.addstr(1, hex_start_x + 10, header, curses.A_BOLD)
         except curses.error:
             pass
 
+        # Vypočítat pozici footer hlavičky
+        footer_y = height - 9  # Poslední řádek před separátorem bude pro footer
+
         for i in range(editor_height):
             line_num = self.hex_scroll_offset + i
             y_pos = i + 2
 
-            # Zabránit kreslení do footer hlavičky (height - 14)
-            if y_pos >= height - 14:
+            # Zabránit kreslení do řádku s footer hlavičkou
+            if y_pos >= footer_y:
                 break
 
             offset = line_num * 8  # 8 bytů na řádek
@@ -303,47 +330,54 @@ class AcmeTerminalEditor:
 
             chunk = self.hex_data[offset:offset + 8]  # Načíst 8 bytů
 
-            # Je tento řádek highlighted?
-            is_highlighted = (line_num == highlighted_hex_line)
-
             try:
                 # Adresa
                 addr_str = f"{offset:08X}  "
-                if is_highlighted:
-                    self.stdscr.addstr(y_pos, hex_start_x, addr_str, curses.A_REVERSE)
-                else:
-                    self.stdscr.addstr(y_pos, hex_start_x, addr_str, curses.A_BOLD)
+                self.stdscr.addstr(y_pos, hex_start_x, addr_str, curses.A_BOLD)
 
-                # Hex bytes - 8 bytů bez mezery uprostřed
-                hex_str = ""
+                # Hex bytes - vykreslit po jednotlivých bytech se zvýrazněním
+                hex_x = hex_start_x + 10
                 for j, b in enumerate(chunk):
-                    hex_str += f"{b:02X} "
+                    byte_offset_in_file = offset + j
 
-                if hex_start_x + 10 + len(hex_str[:hex_width - 20]) < width - 1:
-                    if is_highlighted:
-                        self.stdscr.addstr(y_pos, hex_start_x + 10, hex_str[:hex_width - 20], curses.A_REVERSE)
-                    else:
-                        self.stdscr.addstr(y_pos, hex_start_x + 10, hex_str[:hex_width - 20])
+                    # Je tento byte zvýrazněný?
+                    is_byte_highlighted = False
+                    if highlighted_start_offset is not None and highlighted_num_bytes > 0:
+                        if highlighted_start_offset <= byte_offset_in_file < highlighted_start_offset + highlighted_num_bytes:
+                            is_byte_highlighted = True
 
-                # ASCII - 8 znaků
-                ascii_str = ""
-                for b in chunk:
-                    if 32 <= b <= 126:
-                        ascii_str += chr(b)
-                    else:
-                        ascii_str += "."
+                    hex_byte = f"{b:02X} "
+                    if hex_x + 3 <= width - 1:
+                        if is_byte_highlighted:
+                            self.stdscr.addstr(y_pos, hex_x, hex_byte, curses.A_REVERSE)
+                        else:
+                            self.stdscr.addstr(y_pos, hex_x, hex_byte)
+                        hex_x += 3
 
-                if hex_width > 35 and hex_start_x + 35 + 8 < width - 1:
-                    if is_highlighted:
-                        self.stdscr.addstr(y_pos, hex_start_x + 35, ascii_str[:8], curses.A_REVERSE)
-                    else:
-                        self.stdscr.addstr(y_pos, hex_start_x + 35, ascii_str[:8])
+                # ASCII - vykreslit po jednotlivých znacích se zvýrazněním
+                if hex_width > 35:
+                    ascii_x = hex_start_x + 35
+                    for j, b in enumerate(chunk):
+                        byte_offset_in_file = offset + j
+
+                        # Je tento byte zvýrazněný?
+                        is_byte_highlighted = False
+                        if highlighted_start_offset is not None and highlighted_num_bytes > 0:
+                            if highlighted_start_offset <= byte_offset_in_file < highlighted_start_offset + highlighted_num_bytes:
+                                is_byte_highlighted = True
+
+                        ascii_char = chr(b) if 32 <= b <= 126 else "."
+                        if ascii_x + 1 <= width - 1:
+                            if is_byte_highlighted:
+                                self.stdscr.addstr(y_pos, ascii_x, ascii_char, curses.A_REVERSE)
+                            else:
+                                self.stdscr.addstr(y_pos, ascii_x, ascii_char)
+                            ascii_x += 1
             except curses.error:
                 pass  # Ignorovat chyby při kreslení na okraj
 
-        # Vykreslit footer hlavičku HEX dumpu (stejná jako nahoře)
-        # Footer bude na řádku před log window (height - 14)
-        footer_y = height - 14
+        # Vykreslit footer hlavičku HEX dumpu na posledním řádku před separátorem
+        footer_y = height - 9  # Poslední řádek před separátorem (height - 8)
         try:
             self.stdscr.addstr(footer_y, hex_start_x + 10, header, curses.A_BOLD)
         except curses.error:
@@ -405,30 +439,103 @@ class AcmeTerminalEditor:
             return byte_offset // 8
         return 0
 
-    def draw_log_window(self):
-        """Kreslení log okna pod HEX viewerem"""
-        height, width = self.stdscr.getmaxyx()
-        hex_start_x = width // 2 + 1
-        hex_width = width - hex_start_x - 1
+    def get_hex_range_for_asm_line(self, asm_line):
+        """Najde byte range (offset, délka) pro ASM řádek"""
+        if asm_line not in self.asm_to_bin_map:
+            return None, 0
 
-        # Log zabere spodních 12 řádků (1 separator + 1 title + 9 log + 1 status)
-        log_height = 9  # Zkráceno z 10 na 9
-        log_start_y = height - log_height - 2  # -2 pro status bar
+        start_offset = self.asm_to_bin_map[asm_line]
+
+        # Najít následující řádek v mapě pro výpočet délky
+        next_offset = None
+        for next_line in range(asm_line + 1, len(self.asm_lines)):
+            if next_line in self.asm_to_bin_map:
+                next_offset = self.asm_to_bin_map[next_line]
+                break
+
+        if next_offset is None:
+            next_offset = len(self.hex_data)
+
+        num_bytes = next_offset - start_offset
+
+        # Omezit na rozumnou délku (max 16 bytů)
+        num_bytes = min(num_bytes, 16)
+
+        return start_offset, num_bytes
+
+    def get_hex_bytes_for_current_line(self):
+        """Získá hex bytes pro aktuální řádek ASM kódu"""
+        # Zkontrolovat, zda máme načtená hex data
+        if not self.hex_data:
+            return ""
+
+        if self.cursor_line >= len(self.asm_lines):
+            return ""
+
+        # Zjistit, zda je aktuální řádek namapovaný na binární data
+        if self.cursor_line not in self.asm_to_bin_map:
+            return ""
+
+        line = self.asm_lines[self.cursor_line].strip()
+        if not line or line.startswith(';'):
+            return ""
+
+        # Získat offset v binárním souboru
+        byte_offset = self.asm_to_bin_map[self.cursor_line]
+
+        # Zjistit kolik bytů zabírá tento řádek
+        # Zkusit najít další řádek v mapě
+        next_offset = None
+        for next_line in range(self.cursor_line + 1, len(self.asm_lines)):
+            if next_line in self.asm_to_bin_map:
+                next_offset = self.asm_to_bin_map[next_line]
+                break
+
+        if next_offset is None:
+            # Pokud není další řádek, použít délku do konce souboru
+            next_offset = len(self.hex_data)
+
+        num_bytes = next_offset - byte_offset
+
+        # Omezit na max 8 bytů pro zobrazení
+        num_bytes = min(num_bytes, 8)
+
+        if num_bytes <= 0:
+            return ""
+
+        # Získat byty z hex_data
+        if byte_offset + num_bytes > len(self.hex_data):
+            return ""
+
+        hex_bytes = self.hex_data[byte_offset:byte_offset + num_bytes]
+
+        # Formátovat jako hex string
+        hex_str = " ".join([f"{b:02X}" for b in hex_bytes])
+
+        return f"[{hex_str}]"
+
+    def draw_log_window(self):
+        """Kreslení log okna pod ASM editorem a HEX viewerem (přes celou šířku)"""
+        height, width = self.stdscr.getmaxyx()
+
+        # Log zabere spodních 6 řádků + separator (1 separator + 1 title + 4 log messages + command + status)
+        log_height = 4  # Počet řádků pro log zprávy
+        log_start_y = height - log_height - 3  # -3 pro title + command + status
 
         try:
-            # Separator line
-            self.stdscr.addstr(log_start_y - 1, hex_start_x, "─" * min(hex_width, width - hex_start_x - 1))
+            # Separator line přes celou šířku
+            self.stdscr.addstr(log_start_y - 1, 0, "─" * (width - 1))
 
             # Log title
             self.stdscr.attron(curses.A_BOLD)
-            self.stdscr.addstr(log_start_y, hex_start_x, "[ LOG ]")
+            self.stdscr.addstr(log_start_y, 0, "[ LOG ]")
             self.stdscr.attroff(curses.A_BOLD)
 
-            # Log messages (posledních 9)
+            # Log messages (posledních N)
             display_start = max(0, len(self.log_messages) - log_height)
             for i in range(log_height):
                 y_pos = log_start_y + 1 + i
-                if y_pos >= height - 1:  # Zastavit před status barem
+                if y_pos >= height - 2:  # Zastavit před command a status barem
                     break
 
                 msg_idx = display_start + i
@@ -437,10 +544,10 @@ class AcmeTerminalEditor:
                     # Zvýraznit ERR zprávy
                     if "ERR:" in msg:
                         self.stdscr.attron(curses.A_BOLD)
-                        self.stdscr.addstr(y_pos, hex_start_x, msg[:hex_width])
+                        self.stdscr.addstr(y_pos, 0, msg[:width - 1])
                         self.stdscr.attroff(curses.A_BOLD)
                     else:
-                        self.stdscr.addstr(y_pos, hex_start_x, msg[:hex_width])
+                        self.stdscr.addstr(y_pos, 0, msg[:width - 1])
         except curses.error:
             pass
 
@@ -485,7 +592,7 @@ class AcmeTerminalEditor:
     def handle_normal_mode(self, key):
         """Zpracování kláves v NORMAL módu"""
         height, width = self.stdscr.getmaxyx()
-        editor_height = height - 4
+        editor_height = height - 11
 
         if key == ord('q'):
             return False  # Quit
@@ -497,7 +604,7 @@ class AcmeTerminalEditor:
             self.command_buffer = ""
         elif key == ord('i'):
             self.mode = 'INSERT'
-        elif key == ord('j') or key == curses.KEY_DOWN:
+        elif key == curses.KEY_DOWN:
             if self.cursor_line < len(self.asm_lines) - 1:
                 self.cursor_line += 1
                 if self.cursor_line >= self.scroll_offset + editor_height:
@@ -520,7 +627,7 @@ class AcmeTerminalEditor:
             if self.cursor_line < len(self.asm_lines):
                 if self.cursor_col < len(self.asm_lines[self.cursor_line]):
                     self.cursor_col += 1
-        elif key == ord('l'):
+        elif key == ord('j'):
             # Hledat label na kterém stojím
             self.find_next_label_occurrence()
         elif key == 6:  # Ctrl+F
@@ -570,7 +677,7 @@ class AcmeTerminalEditor:
     def handle_insert_mode(self, key):
         """Zpracování kláves v INSERT módu"""
         height, width = self.stdscr.getmaxyx()
-        editor_height = height - 4
+        editor_height = height - 11
 
         if key == 27:  # ESC
             self.mode = 'NORMAL'
@@ -739,7 +846,7 @@ class AcmeTerminalEditor:
 
         # Aktualizovat scroll
         height, width = self.stdscr.getmaxyx()
-        editor_height = height - 4
+        editor_height = height - 11
         if self.cursor_line < self.scroll_offset:
             self.scroll_offset = self.cursor_line
         elif self.cursor_line >= self.scroll_offset + editor_height:
@@ -1576,7 +1683,7 @@ class AcmeTerminalEditor:
 
         # Aktualizovat scroll
         height, width = self.stdscr.getmaxyx()
-        editor_height = height - 4
+        editor_height = height - 11
         if self.cursor_line < self.scroll_offset:
             self.scroll_offset = self.cursor_line
         elif self.cursor_line >= self.scroll_offset + editor_height:
@@ -1593,15 +1700,16 @@ class AcmeTerminalEditor:
 
         # Najít začátek a konec slova (label)
         # Label může obsahovat písmena, čísla, podtržítka a tečky
+        # NEOBSAHUJE: minus (-), plus (+), hvězdičku (*), lomítko (/) - to jsou matematické operátory
         start = self.cursor_col
         end = self.cursor_col
 
         # Najít začátek slova
-        while start > 0 and (line[start - 1].isalnum() or line[start - 1] in '_.-'):
+        while start > 0 and (line[start - 1].isalnum() or line[start - 1] in '_.'):
             start -= 1
 
         # Najít konec slova
-        while end < len(line) and (line[end].isalnum() or line[end] in '_.-'):
+        while end < len(line) and (line[end].isalnum() or line[end] in '_.'):
             end += 1
 
         if start == end:
@@ -1611,6 +1719,7 @@ class AcmeTerminalEditor:
 
     def find_next_label_occurrence(self):
         """Najít další výskyt labelu na kterém stojím"""
+        import re
         word = self.get_word_under_cursor()
 
         # Pokud není slovo pod kurzorem (např. jsme na TAB nebo mezeře),
@@ -1625,10 +1734,19 @@ class AcmeTerminalEditor:
             self.add_log("No label under cursor", error=True)
             return
 
-        # Pokud je word instrukce (např. BNE, JMP, JSR), najít label v operandu
+        # Odstranit matematické operace ze slova (může tam být když je word celý operand)
+        # Např. když řádek je "!word L_8077-1" a word je celý "L_8077-1"
+        # Toto by se ale nemělo stát díky úpravě get_word_under_cursor(), ale pro jistotu
+        word = re.split(r'[+\-*/]', word)[0].strip()
+        if not word:
+            self.add_log("No valid label found", error=True)
+            return
+
+        # Pokud je word instrukce nebo direktiva s operandem, najít label/adresu v operandu
         if word.upper() in [
             'JMP', 'JSR', 'BNE', 'BEQ', 'BCC', 'BCS',
-            'BMI', 'BPL', 'BVC', 'BVS', 'JML', 'BRA'
+            'BMI', 'BPL', 'BVC', 'BVS', 'JML', 'BRA',
+            '!WORD', '!WO'
         ]:
             # Extrahovat label z operandu
             if self.cursor_line < len(self.asm_lines):
@@ -1663,6 +1781,11 @@ class AcmeTerminalEditor:
                         operand = operand.split(';')[0].strip()
                     # Odstranit čárky (pro X,Y indexing)
                     operand = operand.rstrip(',')
+                    # Odstranit matematické operace (+1, -1, +2, atd.)
+                    # L_8077-1 -> L_8077
+                    # L_8077+1 -> L_8077
+                    import re
+                    operand = re.split(r'[+\-*/]', operand)[0].strip()
                     if operand:
                         word = operand
                     else:
@@ -1679,10 +1802,25 @@ class AcmeTerminalEditor:
             self.label_search_results = []
             self.label_search_index = 0
 
-            # Najít všechny výskyty
+            # Najít všechny výskyty - hledat definici labelu (s dvojtečkou)
             for i, line in enumerate(self.asm_lines):
-                if word in line:
+                # Zkontrolovat, zda řádek obsahuje definici labelu (word:)
+                stripped = line.strip()
+                # Zkontrolovat různé formáty:
+                # 1. "LABEL:" na začátku řádku
+                # 2. "LABEL: instrukce" (label s kódem na stejném řádku)
+                if stripped.startswith(word + ':') or f' {word}:' in line:
                     self.label_search_results.append(i)
+                    continue
+
+                # Pokud nenajdeme definici, přidat všechny ostatní výskyty
+                # (ale až po kontrole definice)
+
+            # Pokud jsme nenašli definici, hledat všechny výskyty
+            if not self.label_search_results:
+                for i, line in enumerate(self.asm_lines):
+                    if word in line:
+                        self.label_search_results.append(i)
 
             if not self.label_search_results:
                 self.add_log(f"Label '{word}' not found", error=True)
@@ -1711,7 +1849,7 @@ class AcmeTerminalEditor:
 
         # Aktualizovat scroll
         height, width = self.stdscr.getmaxyx()
-        editor_height = height - 4
+        editor_height = height - 11
         if self.cursor_line < self.scroll_offset:
             self.scroll_offset = self.cursor_line
         elif self.cursor_line >= self.scroll_offset + editor_height:
@@ -1728,9 +1866,12 @@ class AcmeTerminalEditor:
         self.save_file()
         self.add_log(f"Compiling {os.path.basename(self.current_file)}...")
 
+        # Vytvořit report file pro přesné mapování
+        self.report_file = self.current_file + ".report"
+
         try:
             result = subprocess.run(
-                [self.acme_path, self.current_file],
+                [self.acme_path, "-r", self.report_file, self.current_file],
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -1782,7 +1923,13 @@ class AcmeTerminalEditor:
 
                 with open(self.bin_file, 'rb') as f:
                     self.hex_data = f.read()
-                self.build_mappings()
+
+                # Použít report file pro přesné mapování (pokud existuje)
+                if self.report_file and os.path.exists(self.report_file):
+                    self.build_mappings_from_report()
+                else:
+                    self.build_mappings()
+
                 self.add_log(f"Loaded {len(self.hex_data)} bytes to HEX viewer")
 
                 # Pokud je disasm mode a máme referenční soubor, porovnat
@@ -1794,6 +1941,46 @@ class AcmeTerminalEditor:
         elif self.bin_file:
             self.add_log(f"Binary file not found: {self.bin_file}", error=True)
 
+    def build_mappings_from_report(self):
+        """Vytvoření mapování ASM -> BIN ze ACME report file (přesné!)"""
+        self.asm_to_bin_map = {}
+
+        try:
+            with open(self.report_file, 'r', encoding='utf-8', errors='ignore') as f:
+                in_main_source = False
+                main_source_name = os.path.basename(self.current_file)
+
+                for line in f:
+                    # Detekovat začátek hlavního souboru
+                    if f'Source: {main_source_name}' in line:
+                        in_main_source = True
+                        continue
+
+                    # Detekovat začátek jiného souboru
+                    if 'Source:' in line and main_source_name not in line:
+                        in_main_source = False
+                        continue
+
+                    # Pokud jsme v hlavním souboru, parsovat řádky
+                    if in_main_source:
+                        # Formát: "  ČÍSLO_ŘÁDKU  OFFSET HEXDATA  KÓD"
+                        # Příklad: "  3649  186f 7998829888988f98...    !word $9879,$9882,$9888,$988F,$9895"
+                        match = re.match(r'^\s+(\d+)\s+([0-9a-fA-F]{4})\s+', line)
+                        if match:
+                            line_num = int(match.group(1)) - 1  # Čísla řádků začínají od 1
+                            offset_hex = match.group(2)
+                            byte_offset = int(offset_hex, 16)
+
+                            # Uložit mapování
+                            self.asm_to_bin_map[line_num] = byte_offset
+
+            self.add_log(f"Loaded {len(self.asm_to_bin_map)} mappings from report file")
+
+        except Exception as e:
+            self.add_log(f"Failed to parse report file: {str(e)}", error=True)
+            # Fallback na starší metodu
+            self.build_mappings()
+
     def build_mappings(self):
         """Vytvoření mapování ASM -> BIN (přesné pomocí opcode tabulky)"""
         self.asm_to_bin_map = {}
@@ -1803,10 +1990,18 @@ class AcmeTerminalEditor:
         pseudopc_start_line = None
         pseudopc_start_offset = None
 
+        # Detekovat formát souboru (!to "file", cbm nebo plain)
+        is_cbm_format = False
+        for line in self.asm_lines:
+            if '!to' in line.lower() and 'cbm' in line.lower():
+                is_cbm_format = True
+                break
+
         # Pro .prg soubory s cbm formátem: první 2 byty jsou load adresa
-        # Sledujeme start_address pro výpočet offsetů
-        start_address = None
-        current_address = None
+        # Pro plain formát: data začínají na offsetu 0
+        # byte_offset se pak inkrementuje sekvenčně celým souborem
+        byte_offset = 2 if is_cbm_format else 0
+        current_address = None  # Sleduje aktuální adresu v paměti (pro informaci)
 
         for line_num, line in enumerate(self.asm_lines):
             line_stripped = line.strip()
@@ -1816,6 +2011,7 @@ class AcmeTerminalEditor:
                 continue
 
             # Zpracovat * = offset directive
+            # *= direktivy se ignorují pro byte_offset (ACME zapisuje sekvenčně)
             if line_stripped.startswith('*'):
                 match = re.search(r'\*\s*=\s*(\$?[0-9A-Fa-f]+)', line_stripped)
                 if match:
@@ -1825,16 +2021,7 @@ class AcmeTerminalEditor:
                     else:
                         new_address = int(offset_str)
 
-                    # První * = nastavuje start address
-                    if start_address is None:
-                        start_address = new_address
-                        current_address = new_address
-                        byte_offset = 0  # První data začínají na offsetu 0 (po 2 bytech load adresy)
-                    else:
-                        # Další * = mění aktuální adresu (skok v paměti)
-                        # Offset v souboru se vypočítá jako rozdíl od start_address
-                        current_address = new_address
-                        byte_offset = current_address - start_address
+                    current_address = new_address
                 continue
 
             # Zpracovat !pseudopc directive

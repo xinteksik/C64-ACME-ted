@@ -1,18 +1,14 @@
-# C64-ACME-ted
-![Profile Views](https://github-vistors-counter.onrender.com/github?username=xinteksik)
-![GitHub last commit](https://img.shields.io/github/last-commit/xinteksik/C64-ACME-ted)
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/xinteksik/C64-ACME-ted/total)
-
+# ACME Terminal Editor
 
 Terminálový editor pro ACME Assembler s integrovaným HEX viewerem a pokročilými funkcemi pro vývoj 6502 kódu.
 
 Terminal editor for ACME Assembler with integrated HEX viewer and advanced features for 6502 development.
 
+---
 <img width="1305" height="634" alt="acme_editor_1" src="https://github.com/user-attachments/assets/393d5e82-948b-432e-a12a-cff548a74fb5" />
 
 <img width="1305" height="634" alt="acme_editor_2" src="https://github.com/user-attachments/assets/89b278af-4b86-407f-910a-db4164d2b24b" />
 
----
 
 ## Funkce / Features
 
@@ -32,10 +28,14 @@ Terminal editor for ACME Assembler with integrated HEX viewer and advanced featu
 
 ### Dual view (ASM + HEX)
 - **Rozdělená obrazovka** - ASM editor vlevo, HEX dump vpravo / split screen - ASM editor left, HEX dump right
-- **Synchronizace** - zvýraznění odpovídajících řádků mezi ASM a HEX / synchronized highlighting between ASM and HEX
+- **Přesné mapování** - využívá ACME report file pro 100% přesné mapování / uses ACME report file for 100% accurate mapping
+  - Funguje i s makry (!source, +makro) / works even with macros (!source, +macro)
+  - Automatická detekce CBM vs Plain formátu / automatic detection of CBM vs Plain format
+- **Byte-level zvýraznění** - zvýrazní jen byty aktuálního řádku, ne celý 8-byte řádek / highlights only bytes of current line, not entire 8-byte row
+- **Vertikální synchronizace** - kurzor a zvýraznění na stejné vizuální pozici / cursor and highlighting at same visual position
 - **HEX formát** - 8 bytů na řádek s adresou, hex hodnotami a ASCII / 8 bytes per line with address, hex values and ASCII
 - **Dynamická hlavička** - zobrazuje offset bytů (00-07 nebo 08-0F) / dynamic header showing byte offsets (00-07 or 08-0F)
-- **Mapping** - přesné mapování ASM řádků na binární offsety / precise mapping of ASM lines to binary offsets
+- **Status bar** - zobrazuje hex byty aktuálního řádku (např. [4C BA 92]) / displays hex bytes of current line (e.g. [4C BA 92])
 
 ### Konverze / Conversion
 - **w** - konverze bytů na word (little-endian) / convert bytes to word (little-endian)
@@ -45,8 +45,11 @@ Terminal editor for ACME Assembler with integrated HEX viewer and advanced featu
 
 ### Vyhledávání a navigace / Search and Navigation
 - **Ctrl+F** - vlastní textové vyhledávání s předvyplněním / custom text search with pre-fill
-- **l** - skok na label/adresu / jump to label/address
-  - Detekce labelů v instrukcích (JMP, JSR, BNE, atd.) / label detection in instructions (JMP, JSR, BNE, etc.)
+- **j** - skok na label/adresu (přemapováno z "l") / jump to label/address (remapped from "l")
+  - Detekce labelů v instrukcích (JMP, JSR, BNE, !word atd.) / label detection in instructions (JMP, JSR, BNE, !word etc.)
+  - Podpora matematických operací (LABEL-1, LABEL+2) / support for math operations (LABEL-1, LABEL+2)
+  - Automatické odstranění operátorů před vyhledáním / automatic removal of operators before search
+  - Prioritní hledání definic labelů (LABEL:) / priority search for label definitions (LABEL:)
   - Skok na absolutní adresy pomocí !pseudopc mapování / jump to absolute addresses using !pseudopc mapping
   - Cyklické procházení výskytů / cyclic browsing through occurrences
 
@@ -89,10 +92,11 @@ Terminal editor for ACME Assembler with integrated HEX viewer and advanced featu
 - \`Ctrl+F\` - SEARCH mode
 
 ### Navigace / Navigation
-- \`j\` / \`↓\` - dolů / down
+- \`↓\` - dolů / down
 - \`k\` / \`↑\` - nahoru / up
 - \`h\` / \`←\` - vlevo / left
 - \`→\` - vpravo / right
+- \`j\` - skok na label/adresu pod kurzorem / jump to label/address under cursor
 - \`PgUp\` / \`PgDn\` - stránka nahoru/dolů / page up/down
 
 ### Příkazy / Commands
@@ -108,7 +112,7 @@ Terminal editor for ACME Assembler with integrated HEX viewer and advanced featu
 - \`c\` - bytes → instruction
 - \`d\` - hex → decimal (zobrazení v logu) / hex → decimal (display in log)
 - \`v\` - sprite preview (8x8)
-- \`l\` - skok na label/adresu / jump to label/address
+- \`j\` - skok na label/adresu / jump to label/address
 - \`Shift+D\` - Disassembler mode
 
 ---
@@ -136,7 +140,7 @@ pip install windows-curses
 
 ### Základní spuštění / Basic start
 \`\`\`bash
-python3 c64-acme-ted.py
+python c64-acme-ted.py
 \`\`\`
 
 Po prvním spuštění použijte \`:o\` pro otevření ASM souboru. Editor si zapamatuje poslední otevřený soubor.
@@ -145,7 +149,7 @@ After first start, use \`:o\` to open an ASM file. The editor will remember the 
 
 ### Spuštění s parametrem / Start with file parameter
 \`\`\`bash
-python3 c64-acme-ted.py mycode.asm
+python c64-acme-ted.py mycode.asm
 \`\`\`
 
 Otevře přímo zadaný soubor. / Opens the specified file directly.
@@ -215,10 +219,72 @@ sprite1:
 
 ---
 
+## Symboly C64 / C64 Symbols
+
+Editor obsahuje soubor \`c64symb.asm\` s definicemi KERNAL/BASIC rutin:
+
+The editor includes \`c64symb.asm\` file with KERNAL/BASIC routine definitions:
+
+\`\`\`asm
+!source "c64symb.asm"
+
+; Použití symbolů místo adres / Using symbols instead of addresses
+    JSR CBM_CHROUT  ; místo JSR $FFD2 / instead of JSR $FFD2
+    JSR CBM_CHRIN   ; místo JSR $FFCF / instead of JSR $FFCF
+\`\`\`
+
+---
+
+## Přesné mapování ASM ↔ HEX / Accurate ASM ↔ HEX Mapping
+
+Editor využívá **ACME report file** pro 100% přesné mapování mezi ASM kódem a binárními daty:
+
+The editor uses **ACME report file** for 100% accurate mapping between ASM code and binary data:
+
+### Jak to funguje / How it works
+
+1. **Kompilace s report file** / Compilation with report file
+   - ACME generuje `.report` soubor s mapováním / ACME generates `.report` file with mapping
+   - Formát: `ŘÁDEK OFFSET HEXDATA KÓD` / Format: `LINE OFFSET HEXDATA CODE`
+   - Příklad / Example: `3649  186f 7998829888...    !word $9879,$9882`
+
+2. **Přesné zvýraznění** / Accurate highlighting
+   - Zvýrazní se jen byty aktuálního řádku / Only bytes of current line are highlighted
+   - Příklad / Example: `JMP $92BA` → zvýrazní `[4C BA 92]` (3 byty)
+   - Status bar zobrazuje hex byty / Status bar displays hex bytes: `[4C BA 92]`
+
+3. **Vertikální synchronizace** / Vertical synchronization
+   - Kurzor na 10. řádku ASM → zvýraznění na 10. řádku HEX / Cursor on line 10 ASM → highlighting on line 10 HEX
+   - Perfektní vizuální korespondence / Perfect visual correspondence
+
+4. **Podpora maker** / Macro support
+   - Funguje i s `!source` a `+makro` / Works with `!source` and `+macro`
+   - Report file obsahuje rozvinutá makra / Report file contains expanded macros
+   - Žádná aproximace, vše přesné / No approximation, everything accurate
+
+### Příklad / Example
+
+```asm
+; ASM kód / ASM code
+3649  !word $9879,$9882,$9888,$988F,$9895
+
+↓ Kompilace / Compilation
+
+; HEX dump
+0000186F  [79 98 82 98 88 98 8F 98 95 98]  <- přesně 10 bytů zvýrazněno
+                                               exactly 10 bytes highlighted
+
+; Status bar
+[79 98 82 98 88 98 8F 98 95 98]
+```
+
+---
+
 ## Známé problémy / Known Issues
 
 - Editor je optimalizován pro terminály s minimální velikostí 80x24 / Editor is optimized for terminals with minimum size of 80x24
 - Některé terminály mohou mít problémy se znaky pro kreslení rámečků / Some terminals may have issues with box-drawing characters
+- Report file se generuje automaticky při F5/F6, pokud chybí, použije se aproximace / Report file is generated automatically on F5/F6, if missing, approximation is used
 
 ---
 

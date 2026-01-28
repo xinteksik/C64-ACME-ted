@@ -4,6 +4,89 @@ Všechny významné změny v tomto projektu budou zdokumentovány v tomto soubor
 
 ---
 
+## [1.1.0] - 2026-01-28 - Přesné mapování a vylepšený HEX viewer
+
+### Přidáno
+
+1. **Přesné mapování ASM → BIN pomocí ACME report file**
+   - ACME generuje report file s přesným mapováním řádků → offsety → hex data
+   - Funkce `build_mappings_from_report()` parsuje report file
+   - 100% přesné mapování i pro soubory s makry (!source, +makro)
+   - Automatický fallback na aproximaci pokud report file chybí
+   - Kompilace nyní používá `-r` parametr pro generování report file
+
+2. **Detekce formátu souboru (CBM vs Plain)**
+   - Automatická detekce `!to "file.prg", cbm` vs `!to "file.bin", plain`
+   - CBM formát: přeskočí 2 byty load adresy
+   - Plain formát: data začínají od offsetu 0
+   - Správné mapování pro oba formáty
+
+3. **Vylepšené zvýrazňování v HEX dumpu**
+   - Zvýrazní se pouze byty aktuálního ASM řádku (ne celý řádek 8 bytů)
+   - Příklad: `JMP $92BA` (3 byty) → zvýrazní jen `[4C BA 92]`
+   - Byte-by-byte vykreslování s individuálním zvýrazněním
+   - Zvýraznění platí i pro ASCII sloupec
+
+4. **Synchronizovaná vertikální pozice ASM ↔ HEX**
+   - Když je kurzor na 10. viditelném řádku ASM, zvýraznění je na 10. řádku HEX
+   - Inteligentní synchronizace scrollu podle vizuální pozice
+   - Omezení scrollu na platný rozsah (nepřetečení)
+
+5. **Hex bytes v status baru**
+   - Status bar zobrazuje hex reprezentaci aktuálního řádku
+   - Příklad: `LDA $58` → `[A5 58]` ve status baru
+   - Automatický výpočet délky instrukce/dat
+   - Zobrazuje max 8 bytů (pro čitelnost)
+
+6. **Vylepšená navigace s klávesou "j"**
+   - Klávesa `j` přemapována na skok na label/adresu
+   - Podpora pro `!word LABEL` a `!word LABEL-1` (matematické operace)
+   - Odstranění matematických operací (+, -, *, /) z labelů před vyhledáním
+   - Prioritní hledání definic labelů (řádky s `LABEL:`)
+   - Klávesa `KEY_DOWN` pro klasický scroll dolů
+
+7. **Optimalizovaný layout**
+   - ASM Editor a HEX Dump mají stejnou výšku (height - 11)
+   - Log window rozšířen přes celou šířku obrazovky
+   - Footer hlavička HEX dumpu správně umístěna
+   - Žádné překrývání prvků
+
+### Opraveno
+
+- Fix: TypeError při prázdném mapování (highlighted_hex_line = None)
+- Fix: Matematické operace v labelech (L_8077-1) nyní správně zpracovány
+- Fix: Minus (-) odstraněn z povolených znaků v názvech labelů
+- Fix: Správné zarovnání ASM a HEX vieweru (stejná výška)
+- Fix: Zvýraznění se neschovává za footer hlavičku
+
+### Technické změny
+
+- `build_mappings_from_report()` - parsování ACME report file
+- `get_hex_range_for_asm_line()` - vrací (offset, délka) pro přesné zvýraznění
+- `get_hex_bytes_for_current_line()` - extrakce hex bytů pro status bar
+- `compile_asm()` - přidán parametr `-r` pro generování report file
+- `draw_hex_viewer()` - byte-by-byte vykreslování se zvýrazněním
+- `find_next_label_occurrence()` - odstranění matematiky z labelů
+- `get_word_under_cursor()` - minus (-) už není součástí labelu
+- `editor_height = height - 11` pro oba panely (ASM i HEX)
+
+### Příklad použití
+
+```asm
+Před (nepřesné mapování):
+3649  !word $9879,$9882,$9888,$988F,$9895
+      ↓
+HEX:  00001768  30 0C 98 38 65 02 85 02  <- ŠPATNĚ! (aproximace)
+
+Po opravě (ACME report file):
+3649  !word $9879,$9882,$9888,$988F,$9895
+      ↓
+HEX:  0000186F  [79 98 82 98 88 98 8F 98 95 98]  <- SPRÁVNĚ!
+Status: [79 98 82 98 88 98 8F 98 95 98]
+```
+
+---
+
 ## [1.0.0] - 2025-01-23 - První vydání na GitHub
 
 ### Přidáno

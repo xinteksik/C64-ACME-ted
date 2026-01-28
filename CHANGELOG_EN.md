@@ -4,6 +4,121 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.1.0] - 2026-01-28 - Accurate ASM ↔ HEX Mapping via ACME Report File
+
+### Major Improvements
+
+1. **100% Accurate ASM → HEX Mapping**
+   - Uses ACME report file (`-r` parameter) for precise mapping
+   - Correctly handles multiple `* = offset` directives
+   - Works with `!source` includes and macro expansions
+   - Line 3649 now correctly maps to offset 0x186F instead of 0x1768
+   - **Critical fix**: Abandoned manual byte counting in favor of ACME's native report format
+
+2. **Byte-Level Highlighting in HEX Dump**
+   - Changed from highlighting entire 8-byte rows to exact byte ranges
+   - Shows only bytes that belong to current ASM instruction
+   - Example: `!word $9879,$9882` highlights only 4 bytes, not full 8-byte row
+   - Individual byte rendering with precise `A_REVERSE` highlighting
+
+3. **Vertical Synchronization of ASM and HEX Views**
+   - When cursor is on line 10 in ASM editor, highlighting appears on line 10 in HEX dump
+   - Synchronized scroll positions maintain visual alignment
+   - Formula: `hex_scroll_offset = highlighted_hex_line - asm_screen_pos`
+   - Both views have identical height (height - 11) for perfect alignment
+
+4. **Hex Bytes in Status Bar**
+   - Current line's hex bytes displayed in status bar
+   - Format: `[4C BA 92]` for easy byte inspection
+   - Shows up to 8 bytes for current instruction
+   - Extracted from precise ACME report mapping
+
+5. **Improved Label Navigation**
+   - 'j' key now jumps to label (instead of scrolling)
+   - Supports `!word LABEL` and `!word LABEL-1` syntax
+   - Math operators (+, -, *, /) automatically stripped from labels
+   - Prioritizes label definitions over usage instances
+
+6. **CBM vs Plain Format Detection**
+   - Automatic detection of `!to "file", cbm` vs `!to "file", plain`
+   - CBM format: skips 2-byte load address header
+   - Plain format: data starts at offset 0
+   - Correct offset calculation for both formats
+
+### Technical Changes
+
+**New Functions:**
+- `build_mappings_from_report()` - Parse ACME report file for accurate line→offset mapping
+- `get_hex_range_for_asm_line(asm_line)` - Get (offset, num_bytes) for specific line
+- `get_hex_bytes_for_current_line()` - Extract hex bytes for status bar display
+
+**Modified Functions:**
+- `compile_asm()` - Added `-r self.report_file` parameter to ACME compilation
+- `draw_hex_viewer()` - Complete rewrite with:
+  - Byte-by-byte rendering instead of 8-byte chunks
+  - Vertical scroll synchronization: `hex_scroll = highlighted_line - screen_pos`
+  - Individual byte highlighting based on exact ranges
+- `find_next_label_occurrence()` - Added math operator removal: `re.split(r'[+\-*/]', label)[0]`
+- `get_word_under_cursor()` - Removed `-` from valid label characters
+- Layout fixes - Both ASM editor and HEX dump now use `height - 11`
+
+**Report File Format:**
+```
+  LINE_NUMBER  OFFSET HEXDATA  CODE
+  3649  186f 7998829888...    !word $9879,$9882,$9888
+```
+
+**Vertical Sync Algorithm:**
+```python
+asm_screen_pos = self.cursor_line - self.scroll_offset
+target_hex_scroll = highlighted_hex_line - asm_screen_pos
+self.hex_scroll_offset = max(0, min(target_hex_scroll, max_scroll))
+```
+
+### Fixed Issues
+
+1. **TypeError: unsupported operand type(s) for *: 'NoneType' and 'int'**
+   - Added null check before `highlighted_hex_line * 8` calculation
+   - Graceful fallback to default header when no mapping exists
+
+2. **NameError: cannot access local variable 'current_address'**
+   - Restored `current_address = None` declaration
+   - Needed for address incrementing in mapping functions
+
+3. **ASM Editor showing extra line causing footer overlap**
+   - Changed from `height - 10` to `height - 11` for ASM editor
+   - Both panels now have identical height for proper alignment
+
+4. **Highlighting not vertically aligned**
+   - Fixed scroll calculation to account for visual screen position
+   - Synchronized scrolling maintains cursor-to-highlight alignment
+
+5. **Label navigation failed with math operations**
+   - Strip operators from expressions like `LABEL-1` before search
+   - Support for `!word` directive with label operands
+
+### Why ACME Report File?
+
+Manual byte counting failed because:
+- Multiple `* = offset` directives change memory address without affecting file offset
+- `!source` includes add bytes from external files not visible in main ASM
+- Macros (`+macro_name`) expand to multiple instructions
+
+ACME's report file provides:
+- Exact line number → file offset mapping
+- Pre-calculated byte positions after macro expansion
+- Handles all directives and addressing modes correctly
+- 100% accurate - no approximation needed
+
+### Migration Notes
+
+- Report file (`.asm.report`) automatically generated during compilation
+- No changes to compilation workflow required
+- Works with existing ACME assembler installations
+- Compatible with both CBM and plain binary formats
+
+---
+
 ## [1.0.0] - 2025-01-23 - Initial GitHub Release
 
 ### Added
